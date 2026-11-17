@@ -367,3 +367,159 @@ joblib.dump(preprocessor, "models/preprocessor.pkl")
 print("\nMODEL SAVING")
 print("Random Forest model saved successfully.")
 print("Preprocessor saved successfully.")
+
+# PREDICTION PROBABILITY ANALYSIS
+
+y_prob = forest_model.predict_proba(X_test_processed)[:, 1]
+
+print("\nPREDICTION PROBABILITY ANALYSIS")
+print("Minimum probability:", y_prob.min())
+print("Maximum probability:", y_prob.max())
+print("Average probability:", y_prob.mean())
+
+# THRESHOLD COMPARISON
+
+from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
+
+thresholds = [0.30, 0.40, 0.50, 0.60]
+
+print("\nTHRESHOLD COMPARISON")
+
+for threshold in thresholds:
+    y_pred_threshold = (y_prob >= threshold).astype(int)
+
+    print(f"\nThreshold: {threshold}")
+    print("Precision:", precision_score(y_test, y_pred_threshold))
+    print("Recall:", recall_score(y_test, y_pred_threshold))
+    print("F1 Score:", f1_score(y_test, y_pred_threshold))
+    print("Confusion Matrix:")
+    print(confusion_matrix(y_test, y_pred_threshold))
+
+    # PRECISION-RECALL VS THRESHOLD GRAPH
+
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_curve
+
+precision_values, recall_values, threshold_values = precision_recall_curve(
+    y_test, y_prob
+)
+
+plt.figure(figsize=(10, 6))
+
+plt.plot(threshold_values, precision_values[:-1], label="Precision")
+plt.plot(threshold_values, recall_values[:-1], label="Recall")
+
+plt.xlabel("Classification Threshold")
+plt.ylabel("Score")
+plt.title("Precision and Recall at Different Thresholds")
+plt.legend()
+plt.grid(True)
+
+plt.savefig("threshold_analysis.png")
+plt.show()
+
+# MODEL CALIBRATION ANALYSIS
+
+from sklearn.calibration import calibration_curve
+
+fraction_positive, mean_predicted = calibration_curve(
+    y_test,
+    y_prob,
+    n_bins=10,
+    strategy="uniform"
+)
+
+plt.figure(figsize=(8, 6))
+
+plt.plot(mean_predicted, fraction_positive, marker="o", label="Random Forest")
+plt.plot([0, 1], [0, 1], linestyle="--", label="Perfect Calibration")
+
+plt.xlabel("Mean Predicted Probability")
+plt.ylabel("Actual Default Rate")
+plt.title("Random Forest Calibration Curve")
+plt.legend()
+plt.grid(True)
+
+plt.savefig("calibration_curve.png")
+plt.show()
+
+print("\nCALIBRATION ANALYSIS")
+print("Mean predicted probability:", y_prob.mean())
+print("Actual default rate:", y_test.mean())
+
+# BRIER SCORE EVALUATION
+
+from sklearn.metrics import brier_score_loss
+
+brier_score = brier_score_loss(y_test, y_prob)
+
+print("\nBRIER SCORE")
+print("Random Forest Brier Score:", brier_score)
+
+baseline_probability = y_train.mean()
+
+baseline_brier = brier_score_loss(
+    y_test,
+    [baseline_probability] * len(y_test)
+)
+
+print("Baseline Brier Score:", baseline_brier)
+
+# RANDOM FOREST PROBABILITY CALIBRATION
+
+from sklearn.calibration import CalibratedClassifierCV
+
+calibrated_model = CalibratedClassifierCV(
+    forest_model,
+    method="sigmoid",
+    cv=5
+)
+
+calibrated_model.fit(X_train_processed, y_train)
+
+calibrated_probabilities = calibrated_model.predict_proba(
+    X_test_processed
+)[:, 1]
+
+calibrated_brier = brier_score_loss(
+    y_test,
+    calibrated_probabilities
+)
+
+print("\nCALIBRATED RANDOM FOREST")
+print("Original Brier Score:", brier_score)
+print("Calibrated Brier Score:", calibrated_brier)
+print("Mean calibrated probability:", calibrated_probabilities.mean())
+
+# CALIBRATED MODEL CLASSIFICATION PERFORMANCE
+
+calibrated_predictions = calibrated_model.predict(X_test_processed)
+
+from sklearn.metrics import (
+    classification_report,
+    roc_auc_score,
+    average_precision_score
+)
+
+print("\nCALIBRATED MODEL PERFORMANCE")
+
+print("\nClassification Report:")
+print(classification_report(y_test, calibrated_predictions))
+
+print("ROC-AUC:",
+      roc_auc_score(y_test, calibrated_probabilities))
+
+print("Average Precision:",
+      average_precision_score(y_test, calibrated_probabilities))
+
+print("Brier Score:",
+      brier_score_loss(y_test, calibrated_probabilities))
+
+# SAVE CALIBRATED MODEL
+
+joblib.dump(
+    calibrated_model,
+    "models/calibrated_random_forest.pkl"
+)
+
+print("\nCalibrated model saved successfully.")
